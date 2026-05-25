@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KC 控制器模拟器 - 仪表板</title>
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif; background: #1a1d23; color: #e0e0e0; display: flex; height: 100vh; overflow: hidden; }
+#map-panel { flex: 1; position: relative; min-width: 0; }
+#map-panel canvas { display: block; background: #21252b; }
+#side-panel { width: 380px; display: flex; flex-direction: column; border-left: 1px solid #333; background: #252830; }
+#status-card { padding: 16px; border-bottom: 1px solid #333; }
+#status-card h3 { margin-bottom: 10px; color: #61afef; font-size: 15px; }
+.status-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 12px; }
+.status-grid .label { color: #888; }
+.status-grid .value { color: #e5c07b; text-align: right; font-family: 'Consolas', monospace; }
+#controls { padding: 16px; border-bottom: 1px solid #333; display: flex; flex-wrap: wrap; gap: 6px; }
+#controls button { padding: 6px 14px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 500; }
+.btn-act { background: #61afef; color: #1a1d23; } .btn-act:hover { background: #78c0ff; }
+.btn-err { background: #e06c75; color: #fff; } .btn-err:hover { background: #f0818a; }
+.btn-ok { background: #98c379; color: #1a1d23; } .btn-ok:hover { background: #aed78c; }
+#log-panel { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+#log-panel h3 { padding: 12px 16px 6px; color: #61afef; font-size: 14px; }
+#log-list { flex: 1; overflow-y: auto; padding: 0 12px 12px; font-family: 'Consolas', monospace; font-size: 11px; }
+.log-entry { padding: 4px 8px; margin: 2px 0; border-radius: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.log-entry.recv { background: #1e3525; color: #98c379; }
+.log-entry.send { background: #2c2530; color: #c678dd; }
+#overlay { position: absolute; top: 10px; left: 10px; background: #252830cc; padding: 8px 14px; border-radius: 6px; font-size: 12px; color: #888; pointer-events: none; }
+</style>
+</head>
+<body>
+<div id="map-panel">
+  <canvas id="map-canvas"></canvas>
+  <div id="overlay">
+    <div>端口: 17804 (Nav) / 17800 (QR)</div>
+    <div id="stats-line">收包: 0 | 导航: 0</div>
+  </div>
+</div>
+
+<div id="side-panel">
+  <div id="status-card">
+    <h3>车辆状态 — <span id="veh-name">AGV-001</span></h3>
+    <div class="status-grid">
+      <span class="label">位置 X</span><span class="value" id="sv-x">0.00</span>
+      <span class="label">位置 Y</span><span class="value" id="sv-y">0.00</span>
+      <span class="label">朝向 (rad)</span><span class="value" id="sv-h">0.00</span>
+      <span class="label">速度 X (m/s)</span><span class="value" id="sv-vx">0.00</span>
+      <span class="label">速度 Y (m/s)</span><span class="value" id="sv-vy">0.00</span>
+      <span class="label">工作模式</span><span class="value" id="sv-wm">3</span>
+      <span class="label">AGV 状态</span><span class="value" id="sv-as">0</span>
+      <span class="label">任务 OrderID</span><span class="value" id="sv-oid">0</span>
+      <span class="label">电量</span><span class="value" id="sv-bat">92%</span>
+      <span class="label">载货</span><span class="value" id="sv-cargo">空</span>
+      <span class="label">定位状态</span><span class="value" id="sv-loc">3</span>
+      <span class="label">异常事件</span><span class="value" id="sv-err" style="color:#e06c75;">无</span>
+    </div>
+  </div>
+
+  <div id="controls">
+    <button class="btn-act" onclick="doAction('pause')">暂停</button>
+    <button class="btn-act" onclick="doAction('resume')">恢复</button>
+    <button class="btn-act" onclick="doAction('cancel')">取消任务</button>
+    <button class="btn-ok" onclick="doAction('load')">模拟装载</button>
+    <button class="btn-ok" onclick="doAction('unload')">模拟卸载</button>
+    <button class="btn-err" onclick="injectError()">注入故障</button>
+    <button class="btn-ok" onclick="clearErrors()">清除故障</button>
+  </div>
+
+  <div id="log-panel">
+    <h3>通信日志 (UDP)</h3>
+    <div id="log-list"></div>
+  </div>
+</div>
+
+<script>
+const socket = io();
+let mapData = { points: [], paths: [] };
+let vehState = { x: 0, y: 0, heading: 0 };
+
+const canvas = document.getElementById('map-canvas');
+const ctx = canvas.getContext('2d');
+
+function resize() {
+  canvas.width = canvas.parentElement.clientWidth;
+  canvas.height = canvas.parentElement.clientHeight;
+  draw();
+}
+window.addEventListener('resize', resize);
+
+fetch('/api/map').then(r => r.json()).then(d => {
+  mapData = d;
+  initView();
+  resize();
+  draw();
+});
+
+let viewX = 0, viewY = 0, scale = 40;
+let dragging = false, dragStartX, dragStartY, dragViewX, dragViewY;
+
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  scale *= e.deltaY < 0 ? 1.1 : 0.9;
+  if (scale < 5) scale = 5;
+  if (scale > 200) scale = 200;
+  draw();
+});
+
+canvas.addEventListener('mousedown', e => {
+  dragging = true;
+  dragStartX = e.clientX; dragStartY = e.clientY;
+  dragViewX = viewX; dragViewY = viewY;
+});
+canvas.addEventListener('mousemove', e => {
+  if (!dragging) return;
+  viewX = dragViewX + (e.clientX - dragStartX);
+  viewY = dragViewY + (e.clientY - dragStartY);
+  draw();
+});
+canvas.addEventListener('mouseup', () => dragging = false);
+canvas.addEventListener('mouseleave', () => dragging = false);
+
+function toScreen(wx, wy) {
+  return [(wx + viewX) * scale + canvas.width / 2, (-wy + viewY) * scale + canvas.height / 2];
+}
+
+function initView() {
+  if (mapData.points.length === 0) return;
+  let cx = 0, cy = 0;
+  mapData.points.forEach(p => { cx += p.x; cy += p.y; });
+  cx /= mapData.points.length; cy /= mapData.points.length;
+  viewX = -cx; viewY = cy;
+}
+
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  // Grid
+  ctx.strokeStyle = '#2c313c'; ctx.lineWidth = 1;
+  const gs = scale;
+  const ox = canvas.width / 2 + viewX * scale;
+  const oy = canvas.height / 2 + viewY * scale;
+  for (let x = ox % gs; x < canvas.width; x += gs) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke(); }
+  for (let y = oy % gs; y < canvas.height; y += gs) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke(); }
+
+  const ptMap = {};
+  mapData.points.forEach(p => ptMap[p.id] = p);
+
+  // Paths
+  mapData.paths.forEach(path => {
+    const from = ptMap[path.from], to = ptMap[path.to];
+    if (!from || !to) return;
+    const [x1, y1] = toScreen(from.x, from.y);
+    const [x2, y2] = toScreen(to.x, to.y);
+    ctx.strokeStyle = '#444'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+    const dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy);
+    if (len > 0) {
+      const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+      const ax = -dy / len * 6, ay = dx / len * 6;
+      ctx.fillStyle = '#555';
+      ctx.beginPath(); ctx.moveTo(mx + ax * 1.5, my + ay * 1.5);
+      ctx.lineTo(mx - ax * 1.5, my - ay * 1.5);
+      ctx.lineTo(mx + dx / len * 8, my + dy / len * 8);
+      ctx.fill();
+    }
+  });
+
+  // Points
+  mapData.points.forEach(pt => {
+    const [sx, sy] = toScreen(pt.x, pt.y);
+    ctx.fillStyle = '#61afef';
+    ctx.beginPath(); ctx.arc(sx, sy, 5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.font = '11px Consolas'; ctx.textAlign = 'center';
+    ctx.fillText(pt.name || pt.id, sx, sy - 10);
+  });
+
+  // Vehicle
+  const [vx, vy] = toScreen(vehState.x, vehState.y);
+  ctx.save();
+  ctx.translate(vx, vy);
+  ctx.rotate(-vehState.heading);
+  ctx.fillStyle = '#e06c75';
+  ctx.beginPath();
+  ctx.moveTo(14, 0); ctx.lineTo(-8, -8); ctx.lineTo(-4, 0); ctx.lineTo(-8, 8);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = '#e06c75'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(0, 0, 14, 0, Math.PI * 2); ctx.stroke();
+  ctx.restore();
+}
+
+const STATE_NAMES = ['空闲','运行','暂停','未初始化','手动确认','','导航失败'];
+const LOC_NAMES = ['失败','成功','定位中','完成'];
+
+socket.on('status', data => {
+  vehState = data;
+  document.getElementById('sv-x').textContent = data.x.toFixed(2);
+  document.getElementById('sv-y').textContent = data.y.toFixed(2);
+  document.getElementById('sv-h').textContent = data.heading.toFixed(3);
+  document.getElementById('sv-vx').textContent = data.vx.toFixed(2);
+  document.getElementById('sv-vy').textContent = data.vy.toFixed(2);
+  document.getElementById('sv-wm').textContent = data.work_mode;
+  document.getElementById('sv-as').textContent = STATE_NAMES[data.agv_state] || data.agv_state;
+  document.getElementById('sv-oid').textContent = data.order_id;
+  document.getElementById('sv-bat').textContent = data.battery + '%';
+  document.getElementById('sv-cargo').textContent = data.cargo ? '有' : '空';
+  document.getElementById('sv-loc').textContent = LOC_NAMES[data.loc_status] || data.loc_status;
+  const errDiv = document.getElementById('sv-err');
+  if (data.errors && data.errors.length > 0) {
+    errDiv.textContent = data.errors.map(e => e.code + '#L' + e.level).join(',');
+    errDiv.style.color = '#e06c75';
+  } else { errDiv.textContent = '无'; errDiv.style.color = '#888'; }
+  if (data.stats) {
+    document.getElementById('stats-line').textContent =
+      '收包: ' + (data.stats.nav_packets + data.stats.qr_packets) + ' | 导航: ' + data.stats.nav_tasks;
+  }
+  draw();
+});
+
+socket.on('log', entry => {
+  const div = document.createElement('div');
+  div.className = 'log-entry ' + entry.dir;
+  const hx = entry.raw.substring(0, 60);
+  div.textContent = entry.ts + ' ' + (entry.dir === 'recv' ? '◀' : '▶') + ' ' + entry.cmd + ' [' + hx + (entry.raw.length > 60 ? '...' : '') + ']';
+  const list = document.getElementById('log-list');
+  list.prepend(div);
+  while (list.children.length > 100) list.removeChild(list.lastChild);
+});
+
+function doAction(action) {
+  fetch('/api/action', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({action}) });
+}
+function injectError() {
+  const code = prompt('故障码 (hex, 如 0x1001):', '0x1001');
+  if (code) {
+    fetch('/api/inject_error', { method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({code: parseInt(code), level: 2}) });
+  }
+}
+function clearErrors() {
+  fetch('/api/clear_errors', { method: 'POST' });
+}
+</script>
+</body>
+</html>
