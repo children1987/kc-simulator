@@ -219,6 +219,9 @@ class UdpServer:
 
     def _h_query_status(self, frame, addr, channel):
         v = self.get_vehicle()
+        self._poll_count = getattr(self, '_poll_count', 0) + 1
+        if self._poll_count % 50 == 1:  # 每50次打印一次
+            print(f"[POLL] #{self._poll_count} from {addr}, pos=({v.status.position_x:.1f},{v.status.position_y:.1f}) mode={v.status.work_mode} loc={v.status.localization_status}")
         return EXEC.SUCCESS, v.get_status().encode()
 
     def _h_cargo_status(self, frame, addr, channel):
