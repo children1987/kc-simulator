@@ -83,11 +83,31 @@ class VirtualAgv:
         self.run_time_ms = 0.0
         self.total_run_time_ms = 0.0
 
+        # Fork/Lift variables (Control.*/Button.*)
+        self.vars: dict[str, int] = {
+            'Control.LiftUp': 0, 'Control.LiftDown': 0,
+            'Button.TopLimit': 0, 'Button.DownLimit': 0,
+        }
+        self._lift_start_time = 0.0
+        self._lift_active = False
+
     def update(self, dt: float):
         # Transition localization state: 2(locating) → 3(done) after delay
         if self.status.localization_status == 2:
             self.status.localization_status = 3
             self.status.confidence = 100
+
+        # Lift simulation: after LiftUp/Down triggered, set limit after 0.5s
+        if self._lift_active:
+            import time as _time
+            if _time.monotonic() - self._lift_start_time > 0.5:
+                if self.vars['Control.LiftUp']:
+                    self.vars['Button.TopLimit'] = 1
+                    self.vars['Control.LiftUp'] = 0
+                elif self.vars['Control.LiftDown']:
+                    self.vars['Button.DownLimit'] = 1
+                    self.vars['Control.LiftDown'] = 0
+                self._lift_active = False
 
         if not self._move_active:
             return

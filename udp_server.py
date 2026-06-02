@@ -300,17 +300,51 @@ class UdpServer:
         return EXEC.SUCCESS, b''
 
     def _h_write_var(self, frame, addr, channel):
+        """Handle WRITE_VAR (0x00). Supports Control.* and NaviControl variables."""
         data = frame['data']
         if len(data) >= 17:
             v = self.get_vehicle()
             name_bytes = data[:16].rstrip(b'\x00')
             var_name = name_bytes.decode('ascii', errors='replace')
             value = data[16:20] if len(data) >= 20 else data[16:]
+
             if var_name == 'NaviControl' and len(value) >= 1:
                 v.set_work_mode(value[0])
+            elif var_name == 'Control.LiftUp' and len(value) >= 1:
+                v.vars['Control.LiftUp'] = value[0]
+                v.vars['Button.TopLimit'] = 0  # Reset limit
+                v.vars['Button.DownLimit'] = 0
+                import time as _t
+                v._lift_start_time = _t.monotonic()
+                v._lift_active = True
+            elif var_name == 'Control.LiftDown' and len(value) >= 1:
+                v.vars['Control.LiftDown'] = value[0]
+                v.vars['Button.TopLimit'] = 0  # Reset limit
+                v.vars['Button.DownLimit'] = 0
+                import time as _t
+                v._lift_start_time = _t.monotonic()
+                v._lift_active = True
+            elif var_name in v.vars:
+                if len(value) >= 1:
+                    v.vars[var_name] = value[0]
+                elif len(value) >= 4:
+                    v.vars[var_name] = struct.unpack('<i', value[:4])[0]
         return EXEC.SUCCESS, b''
 
     def _h_read_var(self, frame, addr, channel):
+        """Handle READ_VAR (0x01). Returns variable value."""
+        v = self.get_vehicle()
+        data = frame['data']
+        if len(data) >= 16:
+            name_bytes = data[:16]  # Keep full 16 bytes (null-padded)
+            var_name = name_bytes.rstrip(b'\x00').decode('ascii', errors='replace')
+            val = v.vars.get(var_name, 0)
+            # Response: 16-byte name + value bytes
+            if isinstance(val, int) and val < 256:
+                resp = name_bytes + bytes([val])
+            else:
+                resp = name_bytes + (struct.pack('<i', val) if isinstance(val, int) else bytes([1 if val else 0]))
+            return EXEC.SUCCESS, resp
         return EXEC.SUCCESS, b'\x00' * 4
 
     def _h_read_multi_var(self, frame, addr, channel):
