@@ -334,3 +334,137 @@ def decode_immediate_action(data: bytes):
 
 def encode_cargo_status(loaded: bool) -> bytes:
     return b'\x01' if loaded else b'\x00'
+
+
+# ============================================================================
+# 0x17 QUERY_RUN_STATUS response (per "调度" protocol)
+# ============================================================================
+def encode_run_status(v) -> bytes:
+    """Encode the 0x17 run status response using the real controller format."""
+    buf = bytearray()
+    # 0x00 DOUBLE 本体温度 (body temp)
+    buf.extend(struct.pack('<d', 35.0))
+    # 0x08 DOUBLE 位置的X坐标 (m)
+    buf.extend(struct.pack('<d', v.status.position_x))
+    # 0x10 DOUBLE 位置的Y坐标 (m)
+    buf.extend(struct.pack('<d', v.status.position_y))
+    # 0x18 DOUBLE 位置的朝向角度 (rad)
+    buf.extend(struct.pack('<d', v.status.heading_angle))
+    # 0x20 DOUBLE 电池电量 0~1
+    buf.extend(struct.pack('<d', v.status.battery_percent))
+    # 0x28 U8 是否被阻挡
+    buf.extend(struct.pack('<B', 0))
+    # 0x29 U8 是否在充电
+    buf.extend(struct.pack('<B', v.charge_status))
+    # 0x2A U8 运行模式 0=手动 1=自动
+    buf.extend(struct.pack('<B', 1 if v.status.work_mode == WORK_MODE.AUTO else 0))
+    # 0x2B U8 地图载入状态 0=成功
+    buf.extend(struct.pack('<B', 0))
+    # 0x2C U32 当前的目标点id
+    buf.extend(struct.pack('<I', v.current_target_pt if hasattr(v, 'current_target_pt') else v.last_passed_point_id))
+    # 0x30 DOUBLE 前进速度
+    buf.extend(struct.pack('<d', v.status.velocity_x))
+    # 0x38 DOUBLE 转弯速度
+    buf.extend(struct.pack('<d', v.status.angular_velocity))
+    # 0x40 DOUBLE 电池电压
+    buf.extend(struct.pack('<d', v.status.battery_voltage))
+    # 0x48 DOUBLE 电流
+    buf.extend(struct.pack('<d', v.status.battery_current))
+    # 0x50 U8 当前任务状态: 0=无任务 1=等待 2=前往 3=暂停 4=完成 5=失败 6=退出 7=等待开关门
+    nav_state = getattr(v, 'nav_state', 0)
+    buf.extend(struct.pack('<B', nav_state))
+    # 0x51 U8 保留
+    buf.extend(b'\x00')
+    # 0x52 U16 地图版本号
+    buf.extend(struct.pack('<H', getattr(v, 'map_version', 1)))
+    # 0x54 U8[4] 保留
+    buf.extend(b'\x00' * 4)
+    # 0x58 DOUBLE 累计行驶里程 (m)
+    buf.extend(struct.pack('<d', getattr(v, 'total_distance', 0.0)))
+    # 0x60 DOUBLE 本次运行时间 (ms)
+    buf.extend(struct.pack('<d', getattr(v, 'run_time_ms', 0.0)))
+    # 0x68 DOUBLE 累计运行时间 (ms)
+    buf.extend(struct.pack('<d', getattr(v, 'total_run_time_ms', 0.0)))
+    # 0x70 U8 定位状态: 0=失败 1=成功 2=定位中 3=定位完成
+    buf.extend(struct.pack('<B', v.status.localization_status))
+    # 0x71 U8[3] 保留
+    buf.extend(b'\x00' * 3)
+    # 0x74 U32 地图数量
+    buf.extend(struct.pack('<I', getattr(v, 'map_count', 1)))
+    # 0x78 U8[64] 当前地图名称
+    map_name = getattr(v, 'map_name', 'kc-sim-map').encode('ascii')[:64].ljust(64, b'\x00')
+    buf.extend(map_name)
+    # 0xB8 FLOAT32 置信度 0~1
+    buf.extend(struct.pack('<f', v.status.confidence / 100.0))
+    # 0xBC U8[4] 保留
+    buf.extend(b'\x00' * 4)
+    return bytes(buf)
+
+
+# ============================================================================
+# 0x1D QUERY_NAV_STATUS response (per "调度" protocol)
+# ============================================================================
+def encode_nav_status(v) -> bytes:
+    """Encode the 0x1D nav status response."""
+    buf = bytearray()
+    nav_state = getattr(v, 'nav_state', 0)
+    target_pt = getattr(v, 'current_target_pt', 0)
+    # 0x00 U8 状态
+    buf.extend(struct.pack('<B', nav_state))
+    # 0x01 U8[3] 保留
+    buf.extend(b'\x00' * 3)
+    # 0x04 U16 目标点ID
+    buf.extend(struct.pack('<H', target_pt))
+    # 0x06 U8[2] 保留
+    buf.extend(b'\x00' * 2)
+    # 0x08 U16[126] 已经过的路径点ID
+    passed = getattr(v, 'nav_passed_points', [])
+    for i in range(126):
+        if i < len(passed):
+            buf.extend(struct.pack('<H', passed[i]))
+        else:
+            buf.extend(struct.pack('<H', 0))
+    # 0x104 U16[126] 未经过的路径点ID
+    remaining = getattr(v, 'nav_remaining_points', [])
+    for i in range(126):
+        if i < len(remaining):
+            buf.extend(struct.pack('<H', remaining[i]))
+        else:
+            buf.extend(struct.pack('<H', 0))
+    # pad to match expected length
+    return bytes(buf)
+
+
+# ============================================================================
+# 0x16 NAV_CONTROL request decoder (per "调度" protocol, 432-byte payload)
+# ============================================================================
+def decode_nav_control(data: bytes):
+    """Decode 0x16 NAV_CONTROL request."""
+    if len(data) < 12:
+        return None
+    operation = data[0]       # 0=start, 1=cancel, 2=pause, 3=resume, 4=create+pause
+    nav_mode = data[1]        # 0=to point, 1=to point on path
+    specify_path = data[2]    # 0=no, 1=yes
+    traffic = data[3]         # 0=off, 1=on
+    # Point ID: ASCII string in bytes 4-11
+    point_id_bytes = data[4:12].rstrip(b'\x00')
+    point_id_str = point_id_bytes.decode('ascii', errors='replace')
+    try:
+        point_id = int(point_id_str)
+    except ValueError:
+        point_id = 0
+
+    result = {
+        'operation': operation,
+        'nav_mode': nav_mode,
+        'specify_path': specify_path,
+        'traffic': traffic,
+        'point_id': point_id,
+        'point_id_str': point_id_str,
+    }
+
+    if specify_path and len(data) >= 16:
+        result['path_start'] = struct.unpack_from('<H', data, 12)[0]
+        result['path_end'] = struct.unpack_from('<H', data, 14)[0]
+
+    return result

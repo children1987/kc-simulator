@@ -15,6 +15,8 @@ from protocol import (
     encode_frame, decode_frame,
     encode_cargo_status, encode_subscription_ack,
     decode_subscription_data, decode_immediate_action,
+    encode_run_status, encode_nav_status,
+    decode_nav_control,
     EXEC, CMD, ACTION,
     RobotStatus, NavigationTask,
 )
@@ -193,29 +195,63 @@ class UdpServer:
 
     def _get_handler(self, cmd: int):
         return {
+            # New "调度" protocol commands
+            CMD.NAV_CONTROL: self._h_nav_control,
+            CMD.QUERY_RUN_STATUS: self._h_run_status,
+            CMD.QUERY_NAV_STATUS: self._h_nav_status,
+            CMD.AUTO_MANUAL_SWITCH: self._h_auto_manual_switch,
+            # Legacy commands (keep for backward compat)
             CMD.QUERY_ROBOT_STATUS: self._h_query_status,
             CMD.QUERY_CARGO_STATUS: self._h_cargo_status,
             CMD.HYBRID_NAV_TASK: self._h_nav_task,
             CMD.SUBSCRIPTION: self._h_subscription,
             CMD.IMMEDIATE_ACTION: self._h_immediate_action,
-            CMD.MAG_TASK_DISPATCH: self._h_nav_task,
-            CMD.QR_NAV_TASK: self._h_nav_task,
-            CMD.QR_LONG_PATH_TASK: self._h_nav_task,
-            CMD.MAG_TASK_CONTROL: self._h_immediate_action,
             CMD.QUERY_TRAFFIC_REQUEST: self._h_traffic_query,
             CMD.NOTIFY_TRAFFIC_RESULT: self._h_traffic_notify,
             CMD.WRITE_VAR: self._h_write_var,
             CMD.READ_VAR: self._h_read_var,
-            CMD.READ_MULTI_VAR: self._h_read_multi_var,
-            CMD.WRITE_MULTI_VAR: self._h_write_multi_var,
             CMD.MANUAL_POSITION: self._h_manual_position,
             CMD.CONFIRM_POSITION: self._h_confirm_position,
-            CMD.QUERY_RUN_STATUS: self._h_query_status,
-            CMD.QUERY_NAV_STATUS: self._h_query_status,
             CMD.GET_POSITION: self._h_get_position,
-            CMD.MAG_RUN_STATUS: self._h_query_status,
-            CMD.QR_NAV_STATUS: self._h_query_status,
         }.get(cmd)
+
+    # ── New "调度" protocol handlers ──
+
+    def _h_nav_control(self, frame, addr, channel):
+        """Handle 0x16 NAV_CONTROL (per '调度' protocol)."""
+        cmd = decode_nav_control(frame['data'])
+        if cmd is None:
+            return EXEC.LENGTH_ERROR, b''
+        v = self.get_vehicle()
+        ok = v.handle_nav_control(cmd)
+        if ok:
+            self.stats['nav_tasks'] += 1
+            return EXEC.SUCCESS, b''
+        return EXEC.NAV_STATE_CONFLICT, b''
+
+    def _h_run_status(self, frame, addr, channel):
+        """Handle 0x17 QUERY_RUN_STATUS (per '调度' protocol)."""
+        v = self.get_vehicle()
+        return EXEC.SUCCESS, encode_run_status(v)
+
+    def _h_nav_status(self, frame, addr, channel):
+        """Handle 0x1D QUERY_NAV_STATUS (per '调度' protocol)."""
+        v = self.get_vehicle()
+        return EXEC.SUCCESS, encode_nav_status(v)
+
+    def _h_auto_manual_switch(self, frame, addr, channel):
+        """Handle 0x11 AUTO_MANUAL_SWITCH (4-byte payload)."""
+        data = frame['data']
+        if len(data) >= 1:
+            mode = data[0]  # 0=manual, 1=auto
+            v = self.get_vehicle()
+            if mode == 0:
+                v.set_work_mode(1)  # MANUAL
+            else:
+                v.set_work_mode(3)  # AUTO
+        return EXEC.SUCCESS, b''
+
+    # ── Legacy handlers ──
 
     def _h_query_status(self, frame, addr, channel):
         v = self.get_vehicle()
@@ -284,8 +320,19 @@ class UdpServer:
         return EXEC.SUCCESS, b''
 
     def _h_manual_position(self, frame, addr, channel):
+        """Handle 0x14 manual position. Supports DOUBLE (24B, real protocol) or FLOAT (12B, legacy)."""
         v = self.get_vehicle()
-        return EXEC.SUCCESS, v.handle_manual_position()
+        data = frame['data']
+        if len(data) >= 24:
+            # DOUBLE format (real "调度" protocol)
+            x, y, heading = struct.unpack('<ddd', data[:24])
+            return EXEC.SUCCESS, v.handle_manual_position(x, y, heading)
+        elif len(data) >= 12:
+            # FLOAT format (legacy)
+            x, y, heading = struct.unpack('<fff', data[:12])
+            return EXEC.SUCCESS, v.handle_manual_position(x, y, heading)
+        else:
+            return EXEC.SUCCESS, v.handle_manual_position()
 
     def _h_confirm_position(self, frame, addr, channel):
         v = self.get_vehicle()

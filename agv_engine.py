@@ -71,7 +71,24 @@ class VirtualAgv:
         self.error_events: list[tuple[int, int]] = []
         self.action_statuses: list[tuple[int, int]] = []
 
+        # Nav state (per "调度" protocol 0x17/0x1D)
+        self.nav_state = 0          # 0=NONE,1=WAIT,2=GOING,3=PAUSE,4=DONE,5=FAIL
+        self.current_target_pt = 0
+        self.nav_passed_points: list[int] = []
+        self.nav_remaining_points: list[int] = []
+        self.map_version = 1
+        self.map_count = 1
+        self.map_name = 'kc-sim-map'
+        self.total_distance = 0.0
+        self.run_time_ms = 0.0
+        self.total_run_time_ms = 0.0
+
     def update(self, dt: float):
+        # Transition localization state: 2(locating) → 3(done) after delay
+        if self.status.localization_status == 2:
+            self.status.localization_status = 3
+            self.status.confidence = 100
+
         if not self._move_active:
             return
         elapsed = time.monotonic() - self._move_start_time
@@ -207,17 +224,12 @@ class VirtualAgv:
         self.status.velocity_x = 0.0
         self.status.velocity_y = 0.0
         self.status.angular_velocity = 0.0
+        self.nav_state = 0
+        self.current_target_pt = 0
+        self.nav_remaining_points = []
 
     def _finish_task(self):
-        with self._task_lock:
-            self.status.order_id = 0
-            self.status.task_key = 0
-            self.status.agv_state = AGV_STATE.IDLE
-            self.status.velocity_x = 0.0
-            self.status.velocity_y = 0.0
-            self.status.angular_velocity = 0.0
-            self.current_task = None
-            self._move_active = False
+        self._finish_nav(True)
 
     def set_work_mode(self, mode: int):
         self.status.work_mode = mode
@@ -225,11 +237,97 @@ class VirtualAgv:
             self._cancel_current_task()
             self.status.agv_state = AGV_STATE.IDLE
 
-    def handle_manual_position(self):
-        return struct.pack('<fff', self.status.position_x,
+    def handle_nav_control(self, cmd: dict) -> bool:
+        """Handle 0x16 NAV_CONTROL command (per '调度' protocol).
+        Returns True if command accepted."""
+        operation = cmd.get('operation', 0)
+        point_id = cmd.get('point_id', 0)
+
+        with self._task_lock:
+            if operation == 1:  # Cancel
+                self._cancel_current_task()
+                self.nav_state = 0
+                return True
+            elif operation == 2:  # Pause
+                self.task_paused = True
+                self._move_active = False
+                self.status.agv_state = AGV_STATE.PAUSED
+                self.nav_state = 3
+                return True
+            elif operation == 3:  # Resume
+                self.task_paused = False
+                self.nav_state = 2
+                if self.current_task and self.current_point_index < len(self.current_task.points):
+                    self._start_next_segment()
+                return True
+            elif operation in (0, 4):  # Start or Create+Pause
+                target = self.points.get(point_id)
+                if target is None:
+                    self.nav_state = 5  # FAIL
+                    return False
+
+                self._cancel_current_task()
+                self.current_target_pt = point_id
+                self.nav_passed_points = [self.last_passed_point_id]
+                self.nav_remaining_points = [point_id]
+
+                # Build a simple nav task to the target point
+                from protocol import NavigationTask, TaskPoint
+                task = NavigationTask(
+                    order_id=1, task_key=1,
+                    navigation_mode=0,  # PATH_SPLICE
+                    points=[TaskPoint(sequence_number=0, point_id=point_id)]
+                )
+                self.current_task = task
+                self.current_point_index = 0
+                self.status.order_id = task.order_id
+                self.status.task_key = task.task_key
+                self.task_paused = (operation == 4)
+
+                if operation == 0:
+                    self.nav_state = 2  # GOING
+                    self._start_next_segment()
+                else:
+                    self.nav_state = 3  # PAUSED
+
+                return True
+            return False
+
+    def _finish_nav(self, success: bool):
+        """Called when navigation completes or fails."""
+        with self._task_lock:
+            if success:
+                self.nav_state = 4  # DONE
+                self.last_passed_point_id = self.current_target_pt
+                self.status.last_passed_point_id = self.current_target_pt
+                self.nav_passed_points.append(self.current_target_pt)
+            else:
+                self.nav_state = 5  # FAIL
+            self.status.order_id = 0
+            self.status.task_key = 0
+            self.status.agv_state = AGV_STATE.IDLE
+            self.current_task = None
+            self._move_active = False
+            self.current_target_pt = 0
+            self.nav_remaining_points = []
+
+    def handle_manual_position(self, x: float = None, y: float = None, heading: float = 0.0):
+        """Handle 0x14 manual positioning. If coords provided (DOUBLE format from real protocol),
+        update vehicle position and start localization. Returns current position."""
+        if x is not None and y is not None:
+            self.status.position_x = x
+            self.status.position_y = y
+            if heading != 0.0:
+                self.status.heading_angle = heading
+            # Simulate localization: LS=2 (locating) -> LS=3 (done)
+            self.status.localization_status = 2
+            self.status.confidence = 95
+            # Will transition to 3 after a brief delay (handled in update loop)
+        return struct.pack('<ddd', self.status.position_x,
                           self.status.position_y, self.status.heading_angle)
 
     def handle_confirm_position(self) -> bool:
+        """Handle 0x1F confirm position."""
         self.status.localization_status = 3
         self.status.confidence = 100
         return True
