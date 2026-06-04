@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Check syntax
+        run: python -m py_compile *.py
+
+      - name: Start simulator and smoke test
+        run: |
+          python main.py --no-dashboard --max-speed 0.5 &
+          SIM_PID=$!
+          sleep 3
+
+          # Smoke test: query 0x17
+          python -c "
+          import socket, struct, time
+          AUTH = b'KC-SIMULATOR-01'
+          def enc(cmd, seq, data=b''):
+              ac = AUTH[:16].ljust(16, b'\x00')
+              return struct.pack('<16sBBHBBBxHxx', ac, 1, 0, seq & 0xFFFF, 0x10, cmd, 0, len(data)) + data
+          s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+          s.settimeout(3)
+          s.sendto(enc(0x17, 0), ('127.0.0.1', 17804))
+          d, _ = s.recvfrom(2048)
+          rm = d[0x1C + 0x2A]
+          ls = d[0x1C + 0x70]
+          assert rm == 1, f'Expected AUTO mode, got {rm}'
+          assert ls == 3, f'Expected LS=DONE, got {ls}'
+          print('0x17 OK: AUTO, DONE')
+          s.close()
+          "
+
+          # Test 0x16 nav control
+          python -c "
+          import socket, struct, time
+          AUTH = b'KC-SIMULATOR-01'
+          def enc(cmd, seq, data=b''):
+              ac = AUTH[:16].ljust(16, b'\x00')
+              return struct.pack('<16sBBHBBBxHxx', ac, 1, 0, seq & 0xFFFF, 0x10, cmd, 0, len(data)) + data
+          nav = struct.pack('<BBBB8s', 0, 0, 0, 0, b'2'.ljust(8, b'\x00')).ljust(432, b'\x00')
+          s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+          s.settimeout(3)
+          s.sendto(enc(0x16, 1, nav), ('127.0.0.1', 17804))
+          d, _ = s.recvfrom(1024)
+          ec = d[0x1C - 2]
+          assert ec == 0, f'0x16 failed: exec=0x{ec:02x}'
+          print('0x16 OK: exec=0x00')
+          s.close()
+          "
+
+          # Test 0x14 manual position (DOUBLE format)
+          python -c "
+          import socket, struct, time
+          AUTH = b'KC-SIMULATOR-01'
+          def enc(cmd, seq, data=b''):
+              ac = AUTH[:16].ljust(16, b'\x00')
+              return struct.pack('<16sBBHBBBxHxx', ac, 1, 0, seq & 0xFFFF, 0x10, cmd, 0, len(data)) + data
+          pos_data = struct.pack('<ddd', 1.0, 2.0, 0.0)
+          s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+          s.settimeout(3)
+          s.sendto(enc(0x14, 2, pos_data), ('127.0.0.1', 17804))
+          d, _ = s.recvfrom(1024)
+          ec = d[0x1C - 2]
+          assert ec == 0, f'0x14 failed: exec=0x{ec:02x}'
+          print('0x14 OK: exec=0x00')
+          s.close()
+          "
+
+          kill $SIM_PID 2>/dev/null
+          echo "All smoke tests passed!"

@@ -310,16 +310,16 @@ class UdpServer:
 
             if var_name == 'NaviControl' and len(value) >= 1:
                 v.set_work_mode(value[0])
-            elif var_name == 'Control.LiftUp' and len(value) >= 1:
-                v.vars['Control.LiftUp'] = value[0]
-                v.vars['Button.TopLimit'] = 0  # Reset limit
+            elif var_name == 'Screen.ForkUp' and len(value) >= 1:
+                v.vars['Screen.ForkUp'] = value[0]
+                v.vars['Button.TopLimit'] = 0
                 v.vars['Button.DownLimit'] = 0
                 import time as _t
                 v._lift_start_time = _t.monotonic()
                 v._lift_active = True
-            elif var_name == 'Control.LiftDown' and len(value) >= 1:
-                v.vars['Control.LiftDown'] = value[0]
-                v.vars['Button.TopLimit'] = 0  # Reset limit
+            elif var_name == 'Screen.ForkDown' and len(value) >= 1:
+                v.vars['Screen.ForkDown'] = value[0]
+                v.vars['Button.TopLimit'] = 0
                 v.vars['Button.DownLimit'] = 0
                 import time as _t
                 v._lift_start_time = _t.monotonic()
