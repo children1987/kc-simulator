@@ -178,9 +178,9 @@ class VirtualAgv:
         dy = y - self._move_start_y
         dist = math.hypot(dx, dy)
         if dist < 0.001:
-            self._move_duration = 0.1
+            self._move_duration = 2.0
         else:
-            self._move_duration = dist / self.max_speed
+            self._move_duration = max(dist / self.max_speed, 2.0)
         self._move_active = True
         self.status.agv_state = AGV_STATE.RUNNING
 
