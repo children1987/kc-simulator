@@ -117,6 +117,11 @@ class VirtualAgv:
             self.status.position_y = self._move_target_y
             self.status.velocity_x = 0.0
             self.status.velocity_y = 0.0
+            # 到达后保持车头朝向上次行进方向
+            dx = self._move_target_x - self._move_start_x
+            dy = self._move_target_y - self._move_start_y
+            if math.hypot(dx, dy) > 0.001:
+                self.status.heading_angle = math.atan2(dy, dx)
             self._move_active = False
             self._on_arrive()
         else:
@@ -181,6 +186,9 @@ class VirtualAgv:
             self._move_duration = 2.0
         else:
             self._move_duration = max(dist / self.max_speed, 2.0)
+        # 立即设置车头朝向为行进方向
+        if dist > 0.001:
+            self.status.heading_angle = math.atan2(dy, dx)
         self._move_active = True
         self.status.agv_state = AGV_STATE.RUNNING
 
@@ -337,8 +345,7 @@ class VirtualAgv:
         if x is not None and y is not None:
             self.status.position_x = x
             self.status.position_y = y
-            if heading != 0.0:
-                self.status.heading_angle = heading
+            self.status.heading_angle = heading  # 0.0 是合法朝向（正东方）
             # Simulate localization: LS=2 (locating) -> LS=3 (done)
             self.status.localization_status = 2
             self.status.confidence = 95
