@@ -140,6 +140,9 @@ class VirtualAgv:
                 self.status.heading_angle = math.atan2(dy, dx)
 
     def _on_arrive(self):
+        # 每到达一个点消耗 1% 电量
+        self.status.battery_percent = max(0.0, self.status.battery_percent - 0.01)
+
         if self.current_task is None:
             return
         points = self.current_task.points
@@ -368,6 +371,12 @@ class VirtualAgv:
         self.error_events.clear()
         if self.status.agv_state == AGV_STATE.NAV_FAILED:
             self.status.agv_state = AGV_STATE.IDLE
+
+    def charge_battery(self):
+        """充满电 — 将电量设为 100%"""
+        self.status.battery_percent = 1.0
+        self.status.battery_voltage = 48.0
+        self.charge_status = 0
 
     def get_status(self) -> RobotStatus:
         s = self.status

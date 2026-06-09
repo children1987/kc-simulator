@@ -66,6 +66,7 @@ body { font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif; background: #1a1d
     <button class="btn-ok" onclick="doAction('unload')">模拟卸载</button>
     <button class="btn-err" onclick="injectError()">注入故障</button>
     <button class="btn-ok" onclick="clearErrors()">清除故障</button>
+    <button class="btn-ok" onclick="chargeBattery()" style="background:#e5c07b;color:#1a1d23;">⚡ 充满电</button>
   </div>
 
   <div id="log-panel">
@@ -239,6 +240,11 @@ function injectError() {
 }
 function clearErrors() {
   fetch('/api/clear_errors', { method: 'POST' });
+}
+function chargeBattery() {
+  fetch('/api/charge', { method: 'POST' }).then(r => r.json()).then(d => {
+    if (d.ok) alert('已充满电！电量: 100%');
+  });
 }
 </script>
 </body>

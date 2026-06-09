@@ -104,6 +104,16 @@ def api_clear_errors():
     return jsonify({'ok': True})
 
 
+@app.route('/api/charge', methods=['POST'])
+def api_charge():
+    """充满电 — 将车辆电量设为 100%"""
+    v = _server.get_vehicle()
+    if v is None:
+        return jsonify({'ok': False, 'msg': 'No vehicle'})
+    v.charge_battery()
+    return jsonify({'ok': True, 'battery': 100.0})
+
+
 @app.route('/api/action', methods=['POST'])
 def api_action():
     v = _server.get_vehicle()
