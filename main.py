@@ -5,7 +5,6 @@ KC Controller Simulator — 科聪 MRC/FRC 控制器软件模拟器
 
 使用方法:
   python main.py                          # 启动模拟器 + Web 仪表板
-  python main.py --no-dashboard           # 仅启动 UDP 服务器
   python main.py --nav-port 17804 --qr-port 17800 --dashboard-port 8080
   python main.py --map my_map.json        # 使用自定义地图
   python main.py --auth-code MY_AUTH_CODE # 设置协议授权码
@@ -24,8 +23,6 @@ from dashboard import set_server, add_log, start_dashboard
 def main():
     parser = argparse.ArgumentParser(
         description='KC Controller Simulator — 科聪控制器软件模拟器')
-    parser.add_argument('--no-dashboard', action='store_true',
-                       help='不启动 Web 仪表板，仅运行 UDP 服务器')
     parser.add_argument('--nav-port', type=int, default=17804,
                        help='导航端口 (默认: 17804)')
     parser.add_argument('--qr-port', type=int, default=17800,
@@ -59,8 +56,7 @@ def main():
     print(f"  授权码:       {args.auth_code}")
     print(f"  地图文件:     {map_path}")
     print(f"  AGV 速度:     {args.max_speed} m/s")
-    if not args.no_dashboard:
-        print(f"  Web 仪表板:   http://localhost:{args.dashboard_port}")
+    print(f"  Web 仪表板:   http://localhost:{args.dashboard_port}")
     print("=" * 60)
 
     if not map_path.exists():
@@ -91,28 +87,20 @@ def main():
     signal.signal(signal.SIGINT, _sig_handler)
     signal.signal(signal.SIGTERM, _sig_handler)
 
-    if args.no_dashboard:
-        print("[INFO] 仪表板已禁用。按 Ctrl+C 退出。")
-        try:
-            while not stop_event.is_set():
-                stop_event.wait(timeout=0.5)
-        except KeyboardInterrupt:
-            pass
-    else:
-        dash_thread = threading.Thread(
-            target=start_dashboard,
-            args=(args.dashboard_host, args.dashboard_port),
-            daemon=True,
-            name='dashboard'
-        )
-        dash_thread.start()
-        print(f"[OK] Web 仪表板已启动: http://localhost:{args.dashboard_port}")
+    dash_thread = threading.Thread(
+        target=start_dashboard,
+        args=(args.dashboard_host, args.dashboard_port),
+        daemon=True,
+        name='dashboard'
+    )
+    dash_thread.start()
+    print(f"[OK] Web 仪表板已启动: http://localhost:{args.dashboard_port}")
 
-        try:
-            while not stop_event.is_set():
-                stop_event.wait(timeout=0.5)
-        except KeyboardInterrupt:
-            pass
+    try:
+        while not stop_event.is_set():
+            stop_event.wait(timeout=0.5)
+    except KeyboardInterrupt:
+        pass
 
     print("[INFO] 正在关闭模拟器...")
     server.stop()

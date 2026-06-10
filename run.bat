@@ -15,7 +15,7 @@ set OPENTCS_HOME=C:\Users\ficog\Desktop\opentcs-7.2.1-bin
 
 echo [1/3] Starting KC Simulator...
 taskkill /F /IM python.exe >nul 2>&1
-start "KC-Simulator" python main.py --no-dashboard
+start "KC-Simulator" python main.py
 timeout /t 3 /nobreak >nul
 
 netstat -an | findstr "17804" >nul 2>&1
