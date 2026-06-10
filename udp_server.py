@@ -210,6 +210,8 @@ class UdpServer:
             CMD.NOTIFY_TRAFFIC_RESULT: self._h_traffic_notify,
             CMD.WRITE_VAR: self._h_write_var,
             CMD.READ_VAR: self._h_read_var,
+            CMD.READ_MULTI_VAR: self._h_read_multi_var,
+            CMD.WRITE_MULTI_VAR: self._h_write_multi_var,
             CMD.MANUAL_POSITION: self._h_manual_position,
             CMD.CONFIRM_POSITION: self._h_confirm_position,
             CMD.GET_POSITION: self._h_get_position,
@@ -300,7 +302,7 @@ class UdpServer:
         return EXEC.SUCCESS, b''
 
     def _h_write_var(self, frame, addr, channel):
-        """Handle WRITE_VAR (0x00). Supports Control.* and NaviControl variables."""
+        """Handle WRITE_VAR (0x00). Supports Forkup/Forkdown/Forkforward/Forkback and NaviControl."""
         data = frame['data']
         if len(data) >= 17:
             v = self.get_vehicle()
@@ -310,15 +312,9 @@ class UdpServer:
 
             if var_name == 'NaviControl' and len(value) >= 1:
                 v.set_work_mode(value[0])
-            elif var_name == 'Screen.ForkUp' and len(value) >= 1:
-                v.vars['Screen.ForkUp'] = value[0]
-                v.vars['Button.TopLimit'] = 0
-                v.vars['Button.DownLimit'] = 0
-                import time as _t
-                v._lift_start_time = _t.monotonic()
-                v._lift_active = True
-            elif var_name == 'Screen.ForkDown' and len(value) >= 1:
-                v.vars['Screen.ForkDown'] = value[0]
+            elif var_name in ('Forkup', 'Forkdown', 'Forkforward', 'Forkback') and len(value) >= 1:
+                v.vars[var_name] = value[0]
+                # Reset limit switches
                 v.vars['Button.TopLimit'] = 0
                 v.vars['Button.DownLimit'] = 0
                 import time as _t
@@ -332,25 +328,84 @@ class UdpServer:
         return EXEC.SUCCESS, b''
 
     def _h_read_var(self, frame, addr, channel):
-        """Handle READ_VAR (0x01). Returns variable value."""
+        """Handle READ_VAR (0x01). Returns variable value.
+        'Screen' variable returns a structured data blob similar to real controller."""
         v = self.get_vehicle()
         data = frame['data']
         if len(data) >= 16:
-            name_bytes = data[:16]  # Keep full 16 bytes (null-padded)
+            name_bytes = data[:16]
             var_name = name_bytes.rstrip(b'\x00').decode('ascii', errors='replace')
-            val = v.vars.get(var_name, 0)
+
+            if var_name == 'Screen':
+                # Build Screen variable data matching real controller layout (340 bytes)
+                # offset 0x28 (40): battery voltage (FLOAT), offset 0x2C (44): current (FLOAT)
+                buf = bytearray(340)
+                struct.pack_into('<f', buf, 40, v.status.battery_voltage)  # voltage
+                struct.pack_into('<f', buf, 44, 3.66)   # current
+                struct.pack_into('<f', buf, 52, 0.1)    # small status
+                struct.pack_into('<f', buf, 56, 0.05)   # small status
+                return EXEC.SUCCESS, name_bytes + bytes(buf)
+
+            val = v.vars.get(var_name)
+            if val is None:
+                return EXEC.SUCCESS, name_bytes  # variable not found → echo name only
             # Response: 16-byte name + value bytes
             if isinstance(val, int) and val < 256:
                 resp = name_bytes + bytes([val])
+            elif isinstance(val, int):
+                resp = name_bytes + struct.pack('<i', val)
+            elif isinstance(val, float):
+                resp = name_bytes + struct.pack('<f', val)
             else:
-                resp = name_bytes + (struct.pack('<i', val) if isinstance(val, int) else bytes([1 if val else 0]))
+                resp = name_bytes + bytes([1 if val else 0])
             return EXEC.SUCCESS, resp
         return EXEC.SUCCESS, b'\x00' * 4
 
     def _h_read_multi_var(self, frame, addr, channel):
-        return EXEC.SUCCESS, b'\x00' * 8
+        """Handle READ_MULTI_VAR (0x02). Parses var name + members, returns values."""
+        v = self.get_vehicle()
+        data = frame['data']
+        if len(data) < 8:
+            return EXEC.LENGTH_ERROR, b''
+        # Parse count + ValueID then extract var name and members
+        count = struct.unpack_from('<I', data, 0)[0]
+        value_id = struct.unpack_from('<I', data, 4)[0]
+        results = bytearray()
+        offset_in = 8
+        for _ in range(count):
+            if offset_in + 20 > len(data):
+                break
+            var_name = data[offset_in:offset_in + 16].rstrip(b'\x00').decode('ascii', errors='replace')
+            member_count = struct.unpack_from('<I', data, offset_in + 16)[0]
+            offset_in += 20
+            for _m in range(member_count):
+                if offset_in + 4 > len(data):
+                    break
+                m_off, m_len = struct.unpack_from('<HH', data, offset_in)
+                offset_in += 4
+                # Return a 4-byte value for each member (DWORD)
+                if var_name == 'B2GW' and m_off == 0x18:
+                    results.extend(struct.pack('<I', 127080))  # verified with real controller
+                elif var_name == 'Screen':
+                    # For Screen, extract from the virtual Screen buffer
+                    buf = bytearray(340)
+                    struct.pack_into('<f', buf, 40, v.status.battery_voltage)
+                    if m_off + m_len <= 340:
+                        results.extend(buf[m_off:m_off + m_len])
+                    else:
+                        results.extend(b'\x00' * m_len)
+                else:
+                    results.extend(b'\x00' * m_len)
+        resp = struct.pack('<II', value_id, len(results)) + bytes(results)
+        return EXEC.SUCCESS, resp
 
     def _h_write_multi_var(self, frame, addr, channel):
+        """Handle WRITE_MULTI_VAR (0x03). Parses and acknowledges writes."""
+        data = frame['data']
+        if len(data) < 4:
+            return EXEC.LENGTH_ERROR, b''
+        count = struct.unpack_from('<I', data, 0)[0]
+        # Just acknowledge — no data payload in response for 0x03
         return EXEC.SUCCESS, b''
 
     def _h_manual_position(self, frame, addr, channel):

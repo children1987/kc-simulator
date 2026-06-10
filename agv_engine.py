@@ -83,9 +83,10 @@ class VirtualAgv:
         self.run_time_ms = 0.0
         self.total_run_time_ms = 0.0
 
-        # Fork/Lift variables
+        # Fork/Lift variables (match real controller: no prefix, corrected spelling)
         self.vars: dict[str, int] = {
-            'Screen.ForkUp': 0, 'Screen.ForkDown': 0,
+            'Forkup': 0, 'Forkdown': 0,
+            'Forkforward': 0, 'Forkback': 0,
             'Button.TopLimit': 0, 'Button.DownLimit': 0,
         }
         self._lift_start_time = 0.0
@@ -97,16 +98,20 @@ class VirtualAgv:
             self.status.localization_status = 3
             self.status.confidence = 100
 
-        # Lift simulation: after LiftUp/Down triggered, set limit after 0.5s
+        # Lift simulation: after Forkup/Forkdown triggered, set limit after 0.5s
         if self._lift_active:
             import time as _time
             if _time.monotonic() - self._lift_start_time > 0.5:
-                if self.vars['Screen.ForkUp']:
+                if self.vars['Forkup']:
                     self.vars['Button.TopLimit'] = 1
-                    self.vars['Screen.ForkUp'] = 0
-                elif self.vars['Screen.ForkDown']:
+                    self.vars['Forkup'] = 0
+                elif self.vars['Forkdown']:
                     self.vars['Button.DownLimit'] = 1
-                    self.vars['Screen.ForkDown'] = 0
+                    self.vars['Forkdown'] = 0
+                elif self.vars['Forkforward']:
+                    self.vars['Forkforward'] = 0
+                elif self.vars['Forkback']:
+                    self.vars['Forkback'] = 0
                 self._lift_active = False
 
         if not self._move_active:
