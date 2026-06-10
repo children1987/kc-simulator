@@ -1,6 +1,6 @@
 """
 openTCS REST API Bridge — 独立桥接层
-连接 Node-RED (HTTP REST) ↔ KC 模拟器 (SocketIO + Internal API)
+连接 openTCS REST API ↔ KC 模拟器 (SocketIO + Internal API)
 
 不修改任何 KC 模拟器代码。作为独立进程运行。
 用法: python opentcs_bridge.py [--port 55200] [--sim-url http://localhost:8080]

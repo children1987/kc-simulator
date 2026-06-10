@@ -19,13 +19,13 @@ def create_transport_order():
         "driveOrders": [
             {
                 "destination": {
-                    "name": "0"
+                    "name": "00"
                 },
                 "actions": []
             },
             {
                 "destination": {
-                    "name": "3"
+                    "name": "26"
                 },
                 "actions": [
                     {

@@ -338,12 +338,18 @@ class UdpServer:
 
             if var_name == 'Screen':
                 # Build Screen variable data matching real controller layout (340 bytes)
-                # offset 0x28 (40): battery voltage (FLOAT), offset 0x2C (44): current (FLOAT)
+                # Battery percentage (0~100 FLOAT) at multiple offsets for compatibility:
+                #   0x24 (36) = agv1-energy.json hot-reload default
+                #   0x28 (40) = model XML energyVarOffset default
+                # Voltage/current at subsequent offsets
                 buf = bytearray(340)
-                struct.pack_into('<f', buf, 40, v.status.battery_voltage)  # voltage
-                struct.pack_into('<f', buf, 44, 3.66)   # current
-                struct.pack_into('<f', buf, 52, 0.1)    # small status
-                struct.pack_into('<f', buf, 56, 0.05)   # small status
+                battery_pct = v.status.battery_percent * 100.0
+                struct.pack_into('<f', buf, 36, battery_pct)               # energy % (JSON config)
+                struct.pack_into('<f', buf, 40, battery_pct)               # energy % (XML config)
+                struct.pack_into('<f', buf, 44, v.status.battery_voltage)  # voltage
+                struct.pack_into('<f', buf, 48, 3.66)                      # current
+                struct.pack_into('<f', buf, 52, 0.1)                       # small status
+                struct.pack_into('<f', buf, 56, 0.05)                      # small status
                 return EXEC.SUCCESS, name_bytes + bytes(buf)
 
             val = v.vars.get(var_name)
@@ -388,8 +394,15 @@ class UdpServer:
                     results.extend(struct.pack('<I', 127080))  # verified with real controller
                 elif var_name == 'Screen':
                     # For Screen, extract from the virtual Screen buffer
+                    # Battery percentage at offset 36 & 40 to match energy config
                     buf = bytearray(340)
-                    struct.pack_into('<f', buf, 40, v.status.battery_voltage)
+                    battery_pct = v.status.battery_percent * 100.0
+                    struct.pack_into('<f', buf, 36, battery_pct)               # energy % (JSON config)
+                    struct.pack_into('<f', buf, 40, battery_pct)               # energy % (XML config)
+                    struct.pack_into('<f', buf, 44, v.status.battery_voltage)  # voltage
+                    struct.pack_into('<f', buf, 48, 3.66)                      # current
+                    struct.pack_into('<f', buf, 52, 0.1)                       # small status
+                    struct.pack_into('<f', buf, 56, 0.05)                      # small status
                     if m_off + m_len <= 340:
                         results.extend(buf[m_off:m_off + m_len])
                     else:
