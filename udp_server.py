@@ -407,18 +407,72 @@ class UdpServer:
                         results.extend(buf[m_off:m_off + m_len])
                     else:
                         results.extend(b'\x00' * m_len)
+                elif var_name == 'Control':
+                    # Argentina app — fork control byte array
+                    if m_off + m_len <= 16:
+                        results.extend(v.control[m_off:m_off + m_len])
+                    else:
+                        results.extend(b'\x00' * m_len)
+                elif var_name == 'Button':
+                    # Argentina app — fork limit switch byte array
+                    if m_off + m_len <= 16:
+                        results.extend(v.button[m_off:m_off + m_len])
+                    else:
+                        results.extend(b'\x00' * m_len)
                 else:
                     results.extend(b'\x00' * m_len)
         resp = struct.pack('<II', value_id, len(results)) + bytes(results)
         return EXEC.SUCCESS, resp
 
     def _h_write_multi_var(self, frame, addr, channel):
-        """Handle WRITE_MULTI_VAR (0x03). Parses and acknowledges writes."""
+        """Handle WRITE_MULTI_VAR (0x03). Parses var name + members, applies writes.
+
+        Argentina app fork debug sends:
+          load:   Control[offset=6]=1 (bool)  → triggers fork up simulation
+          unload: Control[offset=7]=1 (bool)  → triggers fork down simulation
+
+        Protocol format (NO ValueID):
+          [U32 count][StrValue × N]
+          StrValue: [U8×16 name][U32 memberCount][ValueMember × M]
+          ValueMember: [U16 offset][U16 length][U32 value]
+        """
+        v = self.get_vehicle()
         data = frame['data']
         if len(data) < 4:
             return EXEC.LENGTH_ERROR, b''
         count = struct.unpack_from('<I', data, 0)[0]
-        # Just acknowledge — no data payload in response for 0x03
+        offset_in = 4
+        for _ in range(count):
+            if offset_in + 20 > len(data):
+                break
+            var_name = data[offset_in:offset_in + 16].rstrip(b'\x00').decode('ascii', errors='replace')
+            member_count = struct.unpack_from('<I', data, offset_in + 16)[0]
+            offset_in += 20
+            for _m in range(member_count):
+                if offset_in + 8 > len(data):
+                    break
+                m_off, m_len, m_val = struct.unpack_from('<HHI', data, offset_in)
+                offset_in += 8
+
+                if var_name == 'Control':
+                    # Write to Control byte array
+                    if m_off + m_len <= 16 and m_len == 1:
+                        v.control[m_off] = m_val & 0xFF
+                        # Fork debug: Control[6]=1 → load, Control[7]=1 → unload
+                        if m_off == 6 and (m_val & 0xFF):
+                            v.trigger_fork_udp('load')
+                        elif m_off == 7 and (m_val & 0xFF):
+                            v.trigger_fork_udp('unload')
+                elif var_name == 'Button':
+                    # Allow writing to Button byte array (for testing/reset)
+                    if m_off + m_len <= 16 and m_len == 1:
+                        v.button[m_off] = m_val & 0xFF
+                elif var_name in v.vars:
+                    # Legacy dict-based vars
+                    if m_len == 1:
+                        v.vars[var_name] = m_val & 0xFF
+                    else:
+                        v.vars[var_name] = m_val
         return EXEC.SUCCESS, b''
 
     def _h_manual_position(self, frame, addr, channel):

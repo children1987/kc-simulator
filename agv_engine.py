@@ -92,6 +92,16 @@ class VirtualAgv:
         self._lift_start_time = 0.0
         self._lift_active = False
 
+        # ── Control/Button byte arrays for 0x02/0x03 operations ──
+        # Argentina app fork debug writes Control[offset] and polls Button[offset].
+        # Load (上升):  Control[6]=1 → 0.5s → Button[9]=1
+        # Unload (下降): Control[7]=1 → 0.5s → Button[10]=1
+        self.control = bytearray(16)    # Control variable (at least 8 bytes for offsets 6/7)
+        self.button = bytearray(16)     # Button variable (at least 11 bytes for offsets 9/10)
+        self._fork_udp_active = False
+        self._fork_udp_start_time = 0.0
+        self._fork_udp_action = ''      # 'load' or 'unload'
+
     def update(self, dt: float):
         # Transition localization state: 2(locating) → 3(done) after delay
         if self.status.localization_status == 2:
@@ -113,6 +123,21 @@ class VirtualAgv:
                 elif self.vars['Forkback']:
                     self.vars['Forkback'] = 0
                 self._lift_active = False
+
+        # Fork UDP simulation (0x03 write → 0x02 poll):
+        #   load:   Control[6]=1 → 0.5s → Button[9]=1, Control[6]=0
+        #   unload: Control[7]=1 → 0.5s → Button[10]=1, Control[7]=0
+        if self._fork_udp_active:
+            if time.monotonic() - self._fork_udp_start_time > 0.5:
+                if self._fork_udp_action == 'load':
+                    self.button[9] = 1
+                    self.button[10] = 0
+                    self.control[6] = 0
+                elif self._fork_udp_action == 'unload':
+                    self.button[10] = 1
+                    self.button[9] = 0
+                    self.control[7] = 0
+                self._fork_udp_active = False
 
         if not self._move_active:
             return
@@ -376,6 +401,27 @@ class VirtualAgv:
         self.error_events.clear()
         if self.status.agv_state == AGV_STATE.NAV_FAILED:
             self.status.agv_state = AGV_STATE.IDLE
+
+    def trigger_fork_udp(self, action: str):
+        """Trigger fork operation via 0x03 WRITE_MULTI_VAR (Argentina app fork debug).
+
+        Args:
+            action: 'load' (上升, Control[6]=1) or 'unload' (下降, Control[7]=1)
+        """
+        if action == 'load':
+            self.control[6] = 1
+            self.control[7] = 0
+            self.button[9] = 0   # reset limit switch
+            self._fork_udp_action = 'load'
+        elif action == 'unload':
+            self.control[7] = 1
+            self.control[6] = 0
+            self.button[10] = 0  # reset limit switch
+            self._fork_udp_action = 'unload'
+        else:
+            return
+        self._fork_udp_start_time = time.monotonic()
+        self._fork_udp_active = True
 
     def charge_battery(self):
         """充满电 — 将电量设为 100%"""
