@@ -28,11 +28,13 @@ class UdpServer:
 
     def __init__(self, nav_port: int = 17804, qr_port: int = 17800,
                  auth_code: bytes = b'KC-SIMULATOR-01',
-                 map_config_path: str = 'map_config.json'):
+                 map_config_path: str = 'map_config.json',
+                 battery_drain_per_step: float = 0.01):
         self.nav_port = nav_port
         self.qr_port = qr_port
         self.auth_code = auth_code[:16].ljust(16, b'\x00')
         self.map_config_path = map_config_path
+        self.battery_drain_per_step = battery_drain_per_step
 
         self.points: dict[int, MapPoint] = {}
         self.paths: dict[int, MapPath] = {}
@@ -83,7 +85,8 @@ class UdpServer:
 
     def _create_default_vehicle(self):
         sp = next(iter(self.points.values())) if self.points else MapPoint(0, 0, 0)
-        self.vehicles['AGV-001'] = VirtualAgv('AGV-001', sp, self.points, self.paths)
+        self.vehicles['AGV-001'] = VirtualAgv('AGV-001', sp, self.points, self.paths,
+                                               battery_drain_per_step=self.battery_drain_per_step)
 
     def get_vehicle(self, name: str | None = None) -> VirtualAgv | None:
         if name:

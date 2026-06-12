@@ -37,6 +37,8 @@ def main():
                        help='UDP 协议授权码，需与 openTCS 端配置一致 (默认: KC-SIMULATOR-01)')
     parser.add_argument('--max-speed', type=float, default=1.0,
                        help='AGV 最大速度 m/s (默认: 1.0)')
+    parser.add_argument('--battery-drain', type=float, default=0.01,
+                       help='每到达一个点消耗的电量比例 (默认: 0.01, 设为 0 则完全不耗电)')
     args = parser.parse_args()
 
     # Resolve map path relative to this script
@@ -56,6 +58,8 @@ def main():
     print(f"  授权码:       {args.auth_code}")
     print(f"  地图文件:     {map_path}")
     print(f"  AGV 速度:     {args.max_speed} m/s")
+    drain_label = "0 (不耗电)" if args.battery_drain == 0 else f"{args.battery_drain:.0%}"
+    print(f"  每步耗电:     {drain_label}")
     print(f"  Web 仪表板:   http://localhost:{args.dashboard_port}")
     print("=" * 60)
 
@@ -68,6 +72,7 @@ def main():
         qr_port=args.qr_port,
         auth_code=auth_bytes,
         map_config_path=str(map_path),
+        battery_drain_per_step=args.battery_drain,
     )
 
     for v in server.vehicles.values():

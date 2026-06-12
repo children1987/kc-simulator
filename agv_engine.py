@@ -33,12 +33,14 @@ class VirtualAgv:
     """A single virtual AGV vehicle with state machine and movement simulation."""
 
     def __init__(self, name: str, start_point: MapPoint, points: dict, paths: dict,
-                 max_speed: float = 1.0, max_angular_speed: float = 1.57):
+                 max_speed: float = 1.0, max_angular_speed: float = 1.57,
+                 battery_drain_per_step: float = 0.01):
         self.name = name
         self.points = points
         self.paths = paths
         self.max_speed = max_speed
         self.max_angular_speed = max_angular_speed
+        self.battery_drain_per_step = battery_drain_per_step
 
         self.status = RobotStatus()
         self.status.position_x = start_point.x
@@ -108,10 +110,10 @@ class VirtualAgv:
             self.status.localization_status = 3
             self.status.confidence = 100
 
-        # Lift simulation: after Forkup/Forkdown triggered, set limit after 0.5s
+        # Lift simulation: after Forkup/Forkdown triggered, set limit after 5s
         if self._lift_active:
             import time as _time
-            if _time.monotonic() - self._lift_start_time > 0.5:
+            if _time.monotonic() - self._lift_start_time > 5.0:
                 if self.vars['Forkup']:
                     self.vars['Button.TopLimit'] = 1
                     self.vars['Forkup'] = 0
@@ -125,10 +127,10 @@ class VirtualAgv:
                 self._lift_active = False
 
         # Fork UDP simulation (0x03 write → 0x02 poll):
-        #   load:   Control[6]=1 → 0.5s → Button[9]=1, Control[6]=0
-        #   unload: Control[7]=1 → 0.5s → Button[10]=1, Control[7]=0
+        #   load:   Control[6]=1 → 5s → Button[9]=1, Control[6]=0
+        #   unload: Control[7]=1 → 5s → Button[10]=1, Control[7]=0
         if self._fork_udp_active:
-            if time.monotonic() - self._fork_udp_start_time > 0.5:
+            if time.monotonic() - self._fork_udp_start_time > 5.0:
                 if self._fork_udp_action == 'load':
                     self.button[9] = 1
                     self.button[10] = 0
@@ -170,8 +172,8 @@ class VirtualAgv:
                 self.status.heading_angle = math.atan2(dy, dx)
 
     def _on_arrive(self):
-        # 每到达一个点消耗 1% 电量
-        self.status.battery_percent = max(0.0, self.status.battery_percent - 0.01)
+        # 每到达一个点消耗电量（默认 1%，可通过配置调整）
+        self.status.battery_percent = max(0.0, self.status.battery_percent - self.battery_drain_per_step)
 
         if self.current_task is None:
             return
