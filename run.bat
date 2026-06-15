@@ -11,7 +11,7 @@ if errorlevel 1 (
     exit /b 1
 )
 
-set OPENTCS_HOME=%~dp0..\opentcs-7.2.1-bin
+set OPENTCS_HOME=%~dp0..\..\opentcs-7.2.1-bin
 
 echo [1/3] Starting KC Simulator...
 taskkill /F /IM python.exe >nul 2>&1

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 端到端模拟脚本 — 模拟完整的 openTCS -> 科聪控制器 -> AGV 运动流程
-独立运行，不需要 openTCS，直接通过 UDP 驱动 kc-simulator
+独立运行，不需要 openTCS，直接通过 UDP 驱动 simulators/kc-simulator
 """
 import socket
 import struct
@@ -286,7 +286,7 @@ def main():
         print("[OK] AGV 模拟器已连接 (port %d)" % NAV_PORT)
     except Exception as e:
         print("[ERROR] 无法连接到 AGV 模拟器: %s" % e)
-        print("  请先启动 kc-simulator: python main.py --no-dashboard")
+        print("  请先启动 simulators/kc-simulator: python main.py --no-dashboard")
         sys.exit(1)
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
