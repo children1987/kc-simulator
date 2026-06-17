@@ -226,7 +226,6 @@ uv run python main.py --battery-drain 0
 | `simulate_e2e.py` | 端到端协议测试脚本（不依赖 openTCS） |
 | `opentcs_bridge.py` | openTCS REST API 桥接（下发运输单） |
 | `create_transport_order.py` | 通过 REST API 创建运输单的 Python 脚本 |
-| `CreateTransportOrder.java` | 通过 REST API 创建运输单的 Java 脚本 |
 | `extract_doc.py` | 从协议文档提取命令码定义 |
 | `pyproject.toml` | 项目元数据与依赖声明（uv 使用） |
 | `.python-version` | 固定 Python 版本为 3.12 |
