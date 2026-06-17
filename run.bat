@@ -4,9 +4,9 @@ echo   KC Simulator + openTCS End-to-End Setup
 echo ============================================
 echo.
 
-python --version >nul 2>&1
+uv --version >nul 2>&1
 if errorlevel 1 (
-    echo [ERROR] Python not found
+    echo [ERROR] uv not found — install via: powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
     pause
     exit /b 1
 )
@@ -15,7 +15,7 @@ set OPENTCS_HOME=%~dp0..\..\opentcs-7.2.1-bin
 
 echo [1/3] Starting KC Simulator...
 taskkill /F /IM python.exe >nul 2>&1
-start "KC-Simulator" python main.py
+start "KC-Simulator" uv run python main.py
 timeout /t 3 /nobreak >nul
 
 netstat -an | findstr "17804" >nul 2>&1

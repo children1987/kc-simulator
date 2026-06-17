@@ -1,0 +1,16 @@
+[project]
+name = "kc-simulator"
+version = "1.0.0"
+description = "科聪 MRC/FRC 控制器 UDP 协议模拟器 — 用于不连接硬件的情况下验证 openTCS 上位机"
+requires-python = ">=3.10"
+dependencies = [
+    "flask>=3.0",
+    "flask-socketio>=5.3",
+]
+
+[project.scripts]
+kc-sim = "main:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
