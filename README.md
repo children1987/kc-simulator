@@ -209,7 +209,7 @@ uv run python main.py --battery-drain 0
 
 - 适配器的授权码必须与模拟器一致（默认 `KC-SIMULATOR-01`）
 - 地图点位 ID 必须匹配 openTCS 模型中的 point 名称
-- 如果出现连接问题，先用 `kc-tools/kc-inspect.py` 直连模拟器验证 UDP 通信是否正常
+- 如果出现连接问题，先用 `tools/kc-tools/kc-inspect.py` 直连模拟器验证 UDP 通信是否正常
 
 ---
 
