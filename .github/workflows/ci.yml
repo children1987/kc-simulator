@@ -16,6 +16,9 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Install dependencies
+        run: pip install flask flask-socketio
+
       - name: Check syntax
         run: python -m py_compile *.py
 
