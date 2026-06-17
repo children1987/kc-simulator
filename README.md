@@ -1,5 +1,7 @@
 # KC Controller Simulator — 科聪 MRC/FRC 控制器模拟器
 
+[![CI](https://github.com/children1987/kc-simulator/actions/workflows/ci.yml/badge.svg)](https://github.com/children1987/kc-simulator/actions/workflows/ci.yml)
+
 在**不连接真实硬件控制器**的情况下，模拟科聪 MRC/FRC 控制器的 UDP 协议行为，用于验证 openTCS 上位机调度系统的完整链路。
 
 ## 目录
