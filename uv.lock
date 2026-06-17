@@ -108,7 +108,7 @@ wheels = [
 [[package]]
 name = "kc-simulator"
 version = "1.0.0"
-source = { editable = "." }
+source = { virtual = "." }
 dependencies = [
     { name = "flask" },
     { name = "flask-socketio" },
