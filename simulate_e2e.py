@@ -286,7 +286,7 @@ def main():
         print("[OK] AGV 模拟器已连接 (port %d)" % NAV_PORT)
     except Exception as e:
         print("[ERROR] 无法连接到 AGV 模拟器: %s" % e)
-        print("  请先启动 simulators/kc-simulator: python main.py --no-dashboard")
+        print("  请先启动 simulators/kc-simulator: python main.py")
         sys.exit(1)
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)

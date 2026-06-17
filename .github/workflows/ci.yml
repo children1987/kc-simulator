@@ -21,7 +21,7 @@ jobs:
 
       - name: Start simulator and smoke test
         run: |
-          python main.py --no-dashboard --max-speed 0.5 &
+          python main.py --max-speed 0.5 &
           SIM_PID=$!
           sleep 3
 
