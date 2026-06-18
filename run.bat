@@ -43,6 +43,6 @@ echo   QR/变量端口:  UDP :17800
 echo   Web 仪表板:   http://localhost:8080
 echo   按 Ctrl+C 停止
 echo.
-python main.py %*
+python main.py --battery-drain 0 %*
 
 pause
