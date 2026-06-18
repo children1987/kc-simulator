@@ -1,64 +1,48 @@
 @echo off
-echo ============================================
-echo   KC Simulator + openTCS End-to-End Setup
-echo ============================================
+REM ============================================================
+REM  科聪 KC Controller Simulator 启动脚本
+REM  UDP 协议模拟器 — 模拟 MRC/FRC 控制器完整行为
+REM
+REM  自动激活 uv 虚拟环境并启动模拟器 + Web 仪表板
+REM ============================================================
+
+cd /d "%~dp0"
+
+echo.
+echo ============================================================
+echo   KC Controller Simulator - 科聪 AGV 控制器模拟器
+echo ============================================================
 echo.
 
-uv --version >nul 2>&1
-if errorlevel 1 (
-    echo [ERROR] uv not found — install via: powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
-    pause
-    exit /b 1
+REM 检查 uv 虚拟环境是否存在
+if not exist ".venv\Scripts\activate.bat" (
+    echo [INFO] 首次运行, 正在创建 uv 虚拟环境...
+    uv venv --python 3.12
+    if errorlevel 1 (
+        echo [ERROR] uv venv 创建失败, 请确认已安装 uv
+        pause
+        exit /b 1
+    )
+    echo [INFO] 正在安装依赖...
+    uv pip install flask flask-socketio
+    if errorlevel 1 (
+        echo [ERROR] 依赖安装失败
+        pause
+        exit /b 1
+    )
+    echo [OK] 环境准备完成
+    echo.
 )
 
-set OPENTCS_HOME=%~dp0..\..\opentcs-7.2.1-bin
+REM 激活虚拟环境
+call .venv\Scripts\activate.bat
 
-echo [1/3] Starting KC Simulator...
-taskkill /F /IM python.exe >nul 2>&1
-start "KC-Simulator" uv run python main.py
-timeout /t 3 /nobreak >nul
+echo [INFO] 启动 AGV 模拟器...
+echo   导航端口:     UDP :17804
+echo   QR/变量端口:  UDP :17800
+echo   Web 仪表板:   http://localhost:8080
+echo   按 Ctrl+C 停止
+echo.
+python main.py %*
 
-netstat -an | findstr "17804" >nul 2>&1
-if errorlevel 1 (
-    echo [ERROR] Simulator failed to start on port 17804
-    pause
-    exit /b 1
-)
-echo [OK] KC Simulator running (UDP :17804)
-
-echo.
-echo [2/3] Starting openTCS Kernel...
-if exist "%OPENTCS_HOME%\opentcs-kernel\startKernel.bat" (
-    start "openTCS-Kernel" cmd /c "cd /d "%OPENTCS_HOME%\opentcs-kernel" && startKernel.bat"
-    echo [OK] openTCS Kernel starting...
-    timeout /t 10 /nobreak >nul
-) else (
-    echo [WARN] openTCS not found at %OPENTCS_HOME%
-    echo        Please start openTCS Kernel manually
-)
-
-echo.
-echo [3/3] Checking connection...
-netstat -an | findstr "1099" >nul 2>&1
-if errorlevel 1 (
-    echo [WARN] openTCS RMI port 1099 not listening yet
-    echo        Kernel may still be starting, please wait...
-) else (
-    echo [OK] openTCS Kernel running (RMI :1099)
-)
-
-echo.
-echo ============================================
-echo   Setup complete!
-echo ============================================
-echo.
-echo   Next steps:
-echo   1. Open Operations Desk
-echo   2. File > Load model > select kc-demo
-echo   3. Actions > New transport order
-echo   4. Add drive orders (pick locations)
-echo   5. Click Ok to dispatch
-echo.
-echo   The AGV will move in the simulator!
-echo ============================================
 pause
