@@ -220,7 +220,7 @@ class VirtualAgv:
         if dist < 0.001:
             self._move_duration = 2.0
         else:
-            self._move_duration = max(dist / self.max_speed, 2.0)
+            self._move_duration = max(dist / self.max_speed, 1.0)
         # 立即设置车头朝向为行进方向
         if dist > 0.001:
             self.status.heading_angle = math.atan2(dy, dx)

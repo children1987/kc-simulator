@@ -35,8 +35,8 @@ def main():
                        help='地图配置文件路径 (默认: map_config.json)')
     parser.add_argument('--auth-code', type=str, default='KC-SIMULATOR-01',
                        help='UDP 协议授权码，需与 openTCS 端配置一致 (默认: KC-SIMULATOR-01)')
-    parser.add_argument('--max-speed', type=float, default=1.0,
-                       help='AGV 最大速度 m/s (默认: 1.0)')
+    parser.add_argument('--max-speed', type=float, default=10.0,
+                       help='AGV 最大速度 m/s (默认: 10.0)')
     parser.add_argument('--battery-drain', type=float, default=0.01,
                        help='每到达一个点消耗的电量比例 (默认: 0.01, 设为 0 则完全不耗电)')
     args = parser.parse_args()
