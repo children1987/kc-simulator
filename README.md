@@ -50,7 +50,7 @@ uv run python main.py
 ============================================================
   导航端口:     17804
   QR/变量端口:  17800
-  授权码:       KC-SIMULATOR-01
+  授权码:       科聪标准二进制认证码（与实车一致）
   地图文件:     E:\workspace\opentcs\simulators\kc-simulator\map_config.json
   AGV 速度:     1.0 m/s
   每步耗电:     1%
@@ -130,7 +130,7 @@ uv run python main.py --battery-drain 0
 | `--dashboard-port` | `8080` | Web 仪表板 HTTP 端口 |
 | `--dashboard-host` | `0.0.0.0` | 仪表板绑定地址 |
 | `--map` | `map_config.json` | 地图配置文件路径 |
-| `--auth-code` | `KC-SIMULATOR-01` | UDP 协议授权码（16 字节 ASCII） |
+| `--auth-code` | (默认二进制) | UDP 协议授权码，不指定则用科聪标准码 |
 | `--max-speed` | `1.0` | AGV 最大移动速度（m/s） |
 | `--battery-drain` | `0.01` | 每到达一个点消耗的电量比例（设为 `0` 不耗电） |
 
@@ -207,7 +207,7 @@ uv run python main.py --battery-drain 0
 
 ### 关键注意点
 
-- 适配器的授权码必须与模拟器一致（默认 `KC-SIMULATOR-01`）
+- 模拟器默认使用科聪标准二进制认证码，与适配器/实车一致，无需额外配置
 - 地图点位 ID 必须匹配 openTCS 模型中的 point 名称
 - 如果出现连接问题，先用 `tools/kc-tools/kc-inspect.py` 直连模拟器验证 UDP 通信是否正常
 

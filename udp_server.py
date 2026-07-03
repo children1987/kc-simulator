@@ -27,7 +27,7 @@ class UdpServer:
     """UDP server simulating one or more Kecong controllers."""
 
     def __init__(self, nav_port: int = 17804, qr_port: int = 17800,
-                 auth_code: bytes = b'KC-SIMULATOR-01',
+                 auth_code: bytes = b'\xed\x01\xe9\xd2\xb8\xa2\x6b\x4c\x85\x72\x77\xf2\xb2\xcb\x61\xb4',
                  map_config_path: str = 'map_config.json',
                  battery_drain_per_step: float = 0.01):
         self.nav_port = nav_port

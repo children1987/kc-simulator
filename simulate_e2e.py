@@ -28,7 +28,7 @@ NAV_MODE_PATH_SPLICE = 0
 ACTION_PALLET_LIFT = 0x16
 
 NAV_PORT = 17804
-AUTH_CODE = b'KC-SIMULATOR-01'
+AUTH_CODE = b'\xed\x01\xe9\xd2\xb8\xa2\x6b\x4c\x85\x72\x77\xf2\xb2\xcb\x61\xb4'
 
 # 地图配置
 MAP_POINTS = {

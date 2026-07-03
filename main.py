@@ -33,8 +33,8 @@ def main():
                        help='仪表板绑定地址 (默认: 0.0.0.0)')
     parser.add_argument('--map', type=str, default='map_config.json',
                        help='地图配置文件路径 (默认: map_config.json)')
-    parser.add_argument('--auth-code', type=str, default='KC-SIMULATOR-01',
-                       help='UDP 协议授权码，需与 openTCS 端配置一致 (默认: KC-SIMULATOR-01)')
+    parser.add_argument('--auth-code', type=str, default=None,
+                       help='UDP 协议授权码（默认使用科聪标准认证码）')
     parser.add_argument('--max-speed', type=float, default=10.0,
                        help='AGV 最大速度 m/s (默认: 10.0)')
     parser.add_argument('--battery-drain', type=float, default=0.01,
@@ -55,7 +55,8 @@ def main():
     print("=" * 60)
     print(f"  导航端口:     {args.nav_port}")
     print(f"  QR/变量端口:  {args.qr_port}")
-    print(f"  授权码:       {args.auth_code}")
+    auth_label = args.auth_code or "(default binary)"
+    print(f"  授权码:       {auth_label}")
     print(f"  地图文件:     {map_path}")
     print(f"  AGV 速度:     {args.max_speed} m/s")
     drain_label = "0 (不耗电)" if args.battery_drain == 0 else f"{args.battery_drain:.0%}"
@@ -66,11 +67,16 @@ def main():
     if not map_path.exists():
         print(f"[WARN] 地图文件不存在: {map_path}，将使用默认直线地图")
 
-    auth_bytes = args.auth_code.encode('ascii', errors='replace')
-    server = UdpServer(
+    # 不指定 --auth-code 则用 UdpServer 默认值（科聪标准二进制认证码）
+    server_kwargs = dict(
         nav_port=args.nav_port,
         qr_port=args.qr_port,
-        auth_code=auth_bytes,
+        map_config_path=str(map_path),
+        battery_drain_per_step=args.battery_drain,
+    )
+    if args.auth_code is not None:
+        server_kwargs['auth_code'] = args.auth_code.encode('ascii', errors='replace')
+    server = UdpServer(**server_kwargs)
         map_config_path=str(map_path),
         battery_drain_per_step=args.battery_drain,
     )

@@ -31,7 +31,7 @@ jobs:
           # Smoke test: query 0x17
           python -c "
           import socket, struct, time
-          AUTH = b'KC-SIMULATOR-01'
+          AUTH = b'\xed\x01\xe9\xd2\xb8\xa2\x6b\x4c\x85\x72\x77\xf2\xb2\xcb\x61\xb4'
           def enc(cmd, seq, data=b''):
               ac = AUTH[:16].ljust(16, b'\x00')
               return struct.pack('<16sBBHBBBxHxx', ac, 1, 0, seq & 0xFFFF, 0x10, cmd, 0, len(data)) + data
@@ -50,7 +50,7 @@ jobs:
           # Test 0x16 nav control
           python -c "
           import socket, struct, time
-          AUTH = b'KC-SIMULATOR-01'
+          AUTH = b'\xed\x01\xe9\xd2\xb8\xa2\x6b\x4c\x85\x72\x77\xf2\xb2\xcb\x61\xb4'
           def enc(cmd, seq, data=b''):
               ac = AUTH[:16].ljust(16, b'\x00')
               return struct.pack('<16sBBHBBBxHxx', ac, 1, 0, seq & 0xFFFF, 0x10, cmd, 0, len(data)) + data
@@ -68,7 +68,7 @@ jobs:
           # Test 0x14 manual position (DOUBLE format)
           python -c "
           import socket, struct, time
-          AUTH = b'KC-SIMULATOR-01'
+          AUTH = b'\xed\x01\xe9\xd2\xb8\xa2\x6b\x4c\x85\x72\x77\xf2\xb2\xcb\x61\xb4'
           def enc(cmd, seq, data=b''):
               ac = AUTH[:16].ljust(16, b'\x00')
               return struct.pack('<16sBBHBBBxHxx', ac, 1, 0, seq & 0xFFFF, 0x10, cmd, 0, len(data)) + data

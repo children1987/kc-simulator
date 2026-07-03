@@ -32,7 +32,7 @@ MAP_POINTS = {
 }
 
 NAV_PORT = 17804
-AUTH_CODE = b'KC-SIMULATOR-01'
+AUTH_CODE = b'\xed\x01\xe9\xd2\xb8\xa2\x6b\x4c\x85\x72\x77\xf2\xb2\xcb\x61\xb4'
 
 
 def encode_frame(auth_code, cmd_code, seq, data, msg_type=MSG_TYPE_REQUEST, exec_code=0):
