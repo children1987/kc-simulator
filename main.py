@@ -77,9 +77,6 @@ def main():
     if args.auth_code is not None:
         server_kwargs['auth_code'] = args.auth_code.encode('ascii', errors='replace')
     server = UdpServer(**server_kwargs)
-        map_config_path=str(map_path),
-        battery_drain_per_step=args.battery_drain,
-    )
 
     for v in server.vehicles.values():
         v.max_speed = args.max_speed
