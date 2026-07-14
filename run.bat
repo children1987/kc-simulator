@@ -16,24 +16,36 @@ echo ============================================================
 echo.
 
 REM 检查 uv 虚拟环境是否存在
-if not exist ".venv\Scripts\activate.bat" (
-    echo [INFO] 首次运行, 正在创建 uv 虚拟环境...
-    uv venv --python 3.12
-    if errorlevel 1 (
-        echo [ERROR] uv venv 创建失败, 请确认已安装 uv
-        pause
-        exit /b 1
-    )
-    echo [INFO] 正在安装依赖...
-    uv pip install flask flask-socketio
-    if errorlevel 1 (
-        echo [ERROR] 依赖安装失败
-        pause
-        exit /b 1
-    )
-    echo [OK] 环境准备完成
-    echo.
+if not exist ".venv\Scripts\activate.bat" goto :create_venv
+
+REM 虚拟环境已存在，验证是否可用（防止从其他机器复制后 trampoline 失效）
+.venv\Scripts\python.exe -c "pass" >nul 2>&1
+if errorlevel 1 (
+    echo [WARN] 虚拟环境不可用（可能从其他机器复制），正在重建...
+    rmdir /s /q .venv
+    goto :create_venv
 )
+goto :venv_ready
+
+:create_venv
+echo [INFO] 正在创建 uv 虚拟环境...
+uv venv --python 3.12
+if errorlevel 1 (
+    echo [ERROR] uv venv 创建失败, 请确认已安装 uv
+    pause
+    exit /b 1
+)
+echo [INFO] 正在安装依赖...
+uv pip install flask flask-socketio
+if errorlevel 1 (
+    echo [ERROR] 依赖安装失败
+    pause
+    exit /b 1
+)
+echo [OK] 环境准备完成
+echo.
+
+:venv_ready
 
 REM 激活虚拟环境
 call .venv\Scripts\activate.bat
