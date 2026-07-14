@@ -1,4 +1,5 @@
 @echo off
+chcp 65001 > nul
 REM ============================================================
 REM  科聪 KC Controller Simulator 启动脚本
 REM  UDP 协议模拟器 — 模拟 MRC/FRC 控制器完整行为
@@ -43,6 +44,6 @@ echo   QR/变量端口:  UDP :17800
 echo   Web 仪表板:   http://localhost:8080
 echo   按 Ctrl+C 停止
 echo.
-python main.py --battery-drain 0 %*
+.venv\Scripts\python.exe main.py --battery-drain 0 %*
 
 pause
